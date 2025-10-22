@@ -78,3 +78,6 @@ datasets/
 .pytest_cache/
 .coverage
 htmlcov/
+
+# uv
+uv.lock
