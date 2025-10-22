@@ -4,12 +4,12 @@ import numpy as np
 import pytest
 import iisignature  # type: ignore
 
-from signature_vol.exact.linear_operator import (
+from signature_vol.exact import (
     SignatureLinearOperator,
     SignatureLinearOperatorBuilder,
+    Signature,
     inner,
 )
-from signature_vol.exact.signature import Signature
 
 
 class TestSignatureLinearOperator:
