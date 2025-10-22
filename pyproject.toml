@@ -1,29 +1,37 @@
 [project]
-name = "omr-signature-volatility"
-version = "0.0.1"
-description = "OMR project on signature volatility models"
-authors = [{name = "Your Name", email = "your.email@example.com"}]
-readme = "README.md"
-requires-python = ">=3.12"
+name = "signature-vol"
+version = "0.1.0"
+description = "Signature volatility research project"
+requires-python = ">=3.9,<3.10"
 dependencies = [
-    "uv>=0.8.22",
-    "numpy==2.3.3",
-    "pandas==2.3.3",
-    "matplotlib==3.10.6",
-    "scipy==1.16.2",
-    "jupyter==1.1.1",
-    "iisignature==0.24",
-    "esig==1.0.0",
+    "iisignature",
+    "numpy>=1.7,<2",
+    "pandas",
+    "pandas_datareader",
+    "scikit-learn",
+    "matplotlib",
+    "typing-extensions",
+    "icecream",
 ]
 
-[project.dev]
-dev = [
-    "pytest",
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["code"]
+
+[tool.uv]
+dev-dependencies = [
+    "pytest>=7.0",
+    "ipykernel",
+    "jupyterlab",
+    "ruff",
     "pytest-cov",
-    "black",
-    "mypy",
-    "ruff==0.12.8",
 ]
 
-[tool.uv.workspace]
-virtual-env = "venv"
+[tool.coverage.run]
+source = ["signature_vol"]
+
+[tool.coverage.report]
+show_missing = true
