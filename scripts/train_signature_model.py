@@ -55,7 +55,7 @@ for i in range(len(df) - window - horizon + 1):
     # target: realized volatility over next horizon (e.g. std of future returns)
     fut = df["logret"].values[i + window : i + window + horizon]
     realized_vol = np.sqrt(np.mean(fut**2))
-    targets.append(np.sqrt(np.mean(fut**2)))  # RMSE-style realized vol
+    targets.append(realized_vol)  # RMSE-style realized vol
     paths.append(path)
 
 targets = np.array(targets)
@@ -81,8 +81,9 @@ model = Pipeline([
 
 mse_scores = []
 for train_idx, test_idx in tscv.split(X):
-    model.fit(X[train_idx], targets[train_idx])
-    pred = model.predict(X[test_idx])
+    model.fit(X[train_idx], log_targets[train_idx])
+    pred_log = model.predict(X[test_idx])
+    pred = np.exp(pred_log)
     mse_scores.append(mean_squared_error(targets[test_idx], pred))
 
 print("CV MSE:", np.mean(mse_scores), "std:", np.std(mse_scores))
@@ -108,5 +109,6 @@ plt.plot(pred, label="Predicted volatility (signature model)", color="dodgerblue
 plt.xlabel("Time index")
 plt.ylabel("Volatility")
 plt.title("Signature-based Volatility Model vs Actual Volatility")
+
 plt.legend()
 plt.show()
