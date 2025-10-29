@@ -12,6 +12,7 @@ dependencies = [
     "matplotlib",
     "typing-extensions",
     "icecream",
+    "yfinance",
 ]
 
 [build-system]
@@ -24,10 +25,11 @@ packages = ["code"]
 [tool.uv]
 dev-dependencies = [
     "pytest>=7.0",
+    "pytest-cov",
     "ipykernel",
     "jupyterlab",
     "ruff",
-    "pytest-cov",
+    "ipywidgets",
 ]
 
 [tool.coverage.run]
