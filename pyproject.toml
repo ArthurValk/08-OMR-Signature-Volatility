@@ -12,6 +12,7 @@ dependencies = [
     "matplotlib",
     "typing-extensions",
     "icecream",
+    "yfinance",
 ]
 
 [build-system]
@@ -26,12 +27,15 @@ dev-dependencies = [
     "pytest>=7.0",
     "ipykernel",
     "jupyterlab",
-    "ruff",
+    "ruff==0.12.8",
     "pytest-cov",
+    "pytest-sugar",
+    "ipywidgets",
 ]
 
 [tool.coverage.run]
 source = ["signature_vol"]
+omit = ["signature_vol/examples/*"]
 
 [tool.coverage.report]
 show_missing = true

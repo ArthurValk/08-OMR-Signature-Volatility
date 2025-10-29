@@ -1,11 +1,14 @@
 """Testing whole integration of components."""
 
 import numpy as np
-import iisignature  # type: ignore
 import pytest
 
-from signature_vol.exact import Signature, SignatureLinearOperatorBuilder, inner
 from signature_vol.exact.brownian_motion import generate_brownian_motion
+from signature_vol.exact.linear_operator import (
+    SignatureLinearOperatorBuilder,
+    inner,
+)
+from signature_vol.exact.signature import Signature
 
 
 class TestIntegration:

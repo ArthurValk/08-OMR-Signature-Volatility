@@ -3,9 +3,8 @@
 import numpy as np
 import pytest
 
+from signature_vol.exact.signature import Signature
 import iisignature  # type: ignore
-
-from signature_vol.exact import Signature
 
 
 class TestSignature:

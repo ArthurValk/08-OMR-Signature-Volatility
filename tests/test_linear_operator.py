@@ -4,12 +4,12 @@ import numpy as np
 import pytest
 import iisignature  # type: ignore
 
-from signature_vol.exact import (
+from signature_vol.exact.linear_operator import (
     SignatureLinearOperator,
     SignatureLinearOperatorBuilder,
-    Signature,
     inner,
 )
+from signature_vol.exact.signature import Signature
 
 
 class TestSignatureLinearOperator:
@@ -368,6 +368,171 @@ class TestSignatureLinearOperatorBuilder:
         assert op[4] == coeff12
         assert op[5] == coeff21
         assert op[6] == coeff22
+
+
+class TestDriftFunctionalFromSDE:
+    """Tests for drift_functional_from_sde method"""
+
+    def test_constant_drift_bm(self):
+        """Test constant drift for Brownian motion."""
+        # BM: dX = mu*dt + sigma*dW
+        # Drift functional: drift = mu (constant)
+        mu, sigma = 0.1, 0.2
+
+        beta_builder = SignatureLinearOperatorBuilder.drift_functional_from_sde(
+            dimension=2, level=1, x0=0, a=mu, b=0.0, alpha=sigma, beta=0.0
+        )
+        beta = beta_builder.build()
+
+        # Should be [mu, 0, 0]
+        assert beta.coeffs[0] == mu
+        assert beta.coeffs[1] == 0.0
+        assert beta.coeffs[2] == 0.0
+
+    def test_linear_drift_ou(self):
+        """Test linear drift for OU process."""
+        # OU: dX = -theta*X*dt + sigma*dW
+        # Drift functional: drift = -theta*X_t
+        theta, sigma = 0.5, 0.3
+
+        # First get solution operator
+        ell_X_builder = SignatureLinearOperatorBuilder.from_sde(
+            dimension=2, level=2, x0=0, a=0, b=-theta, alpha=sigma, beta=0
+        )
+        ell_X = ell_X_builder.build()
+
+        # Drift functional should be -theta * ell_X
+        beta_builder = SignatureLinearOperatorBuilder.drift_functional_from_sde(
+            dimension=2, level=2, x0=0, a=0, b=-theta, alpha=sigma, beta=0
+        )
+        beta = beta_builder.build()
+
+        np.testing.assert_allclose(beta.coeffs, -theta * ell_X.coeffs)
+
+    def test_mixed_drift(self):
+        """Test drift with both constant and linear terms."""
+        # dX = (a + b*X)*dt + alpha*dW
+        a, b, alpha = 1.0, 0.5, 0.2
+        x0 = 2.0
+
+        # Solution operator
+        ell_X_builder = SignatureLinearOperatorBuilder.from_sde(
+            dimension=2, level=1, x0=x0, a=a, b=b, alpha=alpha, beta=0
+        )
+        ell_X = ell_X_builder.build()
+
+        # Drift functional: a + b*ell_X
+        beta_builder = SignatureLinearOperatorBuilder.drift_functional_from_sde(
+            dimension=2, level=1, x0=x0, a=a, b=b, alpha=alpha, beta=0
+        )
+        beta = beta_builder.build()
+
+        # Manual calculation
+        expected = np.zeros_like(beta.coeffs)
+        expected[0] = a  # Constant term
+        expected += b * ell_X.coeffs
+
+        np.testing.assert_allclose(beta.coeffs, expected)
+
+
+class TestDiffusionFunctionalFromSDE:
+    """Tests for diffusion_functional_from_sde method"""
+
+    def test_constant_diffusion_bm(self):
+        """Test constant diffusion for Brownian motion."""
+        # BM: dX = mu*dt + sigma*dW
+        # Diffusion functional: variance = sigma^2 (constant)
+        mu, sigma = 0.1, 0.2
+
+        alpha_builder = SignatureLinearOperatorBuilder.diffusion_functional_from_sde(
+            dimension=2, level=1, x0=0, a=mu, b=0.0, alpha=sigma, beta=0.0
+        )
+        alpha = alpha_builder.build()
+
+        # Should be [sigma^2, 0, 0]
+        assert alpha.coeffs[0] == sigma**2
+        assert alpha.coeffs[1] == 0.0
+        assert alpha.coeffs[2] == 0.0
+
+    def test_constant_diffusion_ou(self):
+        """Test constant diffusion for OU process."""
+        # OU: dX = -theta*X*dt + sigma*dW
+        # Diffusion functional: variance = sigma^2 (constant)
+        theta, sigma = 0.5, 0.3
+
+        alpha_builder = SignatureLinearOperatorBuilder.diffusion_functional_from_sde(
+            dimension=2, level=2, x0=0, a=0, b=-theta, alpha=sigma, beta=0
+        )
+        alpha = alpha_builder.build()
+
+        # Should be [sigma^2, 0, 0, ...]
+        assert alpha.coeffs[0] == sigma**2
+        assert np.all(alpha.coeffs[1:] == 0.0)
+
+    def test_state_dependent_diffusion_warning(self):
+        """Test that state-dependent diffusion raises warning."""
+        # SDE with beta != 0
+        a, b, alpha_param, beta_param = 0.1, 0.0, 0.2, 0.05
+
+        with pytest.warns(UserWarning, match="approximate"):
+            alpha_builder = (
+                SignatureLinearOperatorBuilder.diffusion_functional_from_sde(
+                    dimension=2,
+                    level=1,
+                    x0=0,
+                    a=a,
+                    b=b,
+                    alpha=alpha_param,
+                    beta=beta_param,
+                )
+            )
+            alpha_op = alpha_builder.build()
+
+        # Should have non-zero linear terms
+        assert alpha_op.coeffs[0] == alpha_param**2
+        # Linear term: 2*alpha*beta*ell_X (non-zero)
+        assert not np.allclose(alpha_op.coeffs[1:], 0.0)
+
+
+class TestFunctionalConsistency:
+    """Tests that functionals compose correctly with solution operator"""
+
+    def test_drift_evaluation_bm(self):
+        """Test that drift functional evaluates to correct drift coefficient."""
+        # BM with constant drift
+        mu, sigma = 0.1, 0.2
+
+        # Create a simple signature: [1, dt, dW]
+        dt, dW = 0.01, 0.002
+        sig_array = np.array([1.0, dt, dW])
+
+        # Drift functional
+        beta_builder = SignatureLinearOperatorBuilder.drift_functional_from_sde(
+            dimension=2, level=1, x0=0, a=mu, b=0, alpha=sigma, beta=0
+        )
+        beta = beta_builder.build()
+
+        # Evaluate: should give mu
+        drift_value = sig_array @ beta.coeffs
+        assert np.isclose(drift_value, mu)
+
+    def test_diffusion_evaluation_bm(self):
+        """Test that diffusion functional evaluates to correct variance."""
+        mu, sigma = 0.1, 0.2
+
+        # Create a simple signature
+        dt, dW = 0.01, 0.002
+        sig_array = np.array([1.0, dt, dW])
+
+        # Diffusion functional
+        alpha_builder = SignatureLinearOperatorBuilder.diffusion_functional_from_sde(
+            dimension=2, level=1, x0=0, a=mu, b=0, alpha=sigma, beta=0
+        )
+        alpha = alpha_builder.build()
+
+        # Evaluate: should give sigma^2
+        variance_value = sig_array @ alpha.coeffs
+        assert np.isclose(variance_value, sigma**2)
 
 
 class TestInner:
