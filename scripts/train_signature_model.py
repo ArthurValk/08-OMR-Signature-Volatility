@@ -13,13 +13,9 @@ signatures = [Signature.from_path(path, level=3) for path in paths]
 print(signatures[0].array)
 
 
-
-
-
-
 import pandas as pd
 import numpy as np
-import iisignature     # pip install iisignature
+import iisignature  # type: ignore
 from sklearn.linear_model import LinearRegression
 from sklearn.model_selection import TimeSeriesSplit
 from sklearn.pipeline import Pipeline
@@ -40,18 +36,14 @@ df = df.rename(columns={"Date": "timestamp", "Close": "price"})
 df["logret"] = np.log(df["price"]).diff().fillna(0)
 
 # --- 2. Create sliding windows of paths and target volatility ---
-window = 50   # length of path (timesteps)
+window = 50  # length of path (timesteps)
 horizon = 10  # predict next-horizon realized vol?
 paths = []
 targets = []
 for i in range(len(df) - window - horizon + 1):
     segment = df["logret"].values[i : i + window]
     # richer 3D path: returns, abs(returns), cumulative sum
-    path = np.column_stack([
-        segment,
-        np.abs(segment),
-        np.cumsum(segment)
-    ])
+    path = np.column_stack([segment, np.abs(segment), np.cumsum(segment)])
     # target: realized volatility over next horizon (e.g. std of future returns)
     fut = df["logret"].values[i + window : i + window + horizon]
     realized_vol = np.sqrt(np.mean(fut**2))
@@ -74,10 +66,7 @@ X = np.vstack([iisignature.sig(p, depth) for p in paths])
 
 # --- 4. Train a model with time-series cross-validation ---
 tscv = TimeSeriesSplit(n_splits=5)
-model = Pipeline([
-    ("scale", StandardScaler()),
-    ("clf", LinearRegression())
-])
+model = Pipeline([("scale", StandardScaler()), ("clf", LinearRegression())])
 
 mse_scores = []
 for train_idx, test_idx in tscv.split(X):
@@ -93,7 +82,6 @@ pred_log = model.predict(X)
 pred = np.exp(pred_log)
 
 
-
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -102,9 +90,15 @@ import numpy as np
 # pred     = model.predict(X) # predicted volatilities
 
 plt.figure(figsize=(10, 5))
-plt.xlim(0,200)
+plt.xlim(0, 200)
 plt.plot(targets, label="Actual realized volatility", color="black", linewidth=2)
-plt.plot(pred, label="Predicted volatility (signature model)", color="dodgerblue", linewidth=2, alpha=0.8)
+plt.plot(
+    pred,
+    label="Predicted volatility (signature model)",
+    color="dodgerblue",
+    linewidth=2,
+    alpha=0.8,
+)
 plt.xlabel("Time index")
 plt.ylabel("Volatility")
 plt.title("Signature-based Volatility Model vs Actual Volatility")

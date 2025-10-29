@@ -1,13 +1,15 @@
 """Brownian motion generation."""
 
+from typing import Optional
+
 import numpy as np
 
 
 def generate_brownian_motion(
     n_steps: int,
     T: float,
-    seed=None,
-) -> tuple[np.ndarray, np.ndarray]:
+    seed: Optional[int] = None,
+) -> np.ndarray:
     """Generating a discretized realization of a Brownian motion with n_steps steps over [0,T].
 
     Parameters

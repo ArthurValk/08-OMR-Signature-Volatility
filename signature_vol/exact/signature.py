@@ -59,7 +59,7 @@ class Signature:
             )
 
     @classmethod
-    def from_path(cls, path: np.array, level: int):
+    def from_path(cls, path: np.ndarray, level: int) -> Self:
         """
         Compute signature from path.
 

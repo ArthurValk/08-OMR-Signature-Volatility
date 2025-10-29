@@ -145,7 +145,7 @@ class SignatureLinearOperatorBuilder:
         self.level = level
         # Include the constant term in signature length
         self.sig_length = iisignature.siglength(dimension, level) + 1
-        self._coeffs = None
+        self._coeffs: np.ndarray | None = None
 
     @classmethod
     def from_array(
@@ -556,5 +556,154 @@ class SignatureLinearOperatorBuilder:
                     dimension, length - 1
                 ):
                     yield (coord,) + rest
+
+    # </editor-fold>
+
+    @classmethod
+    def drift_functional_from_sde(
+        cls,
+        dimension: int,
+        level: int,
+        x0: float,
+        a: float,
+        b: float,
+        alpha: float,
+        beta: float,
+    ):
+        """
+        Construct the analytical drift functional β such that:
+            drift(Sig_t) = ⟨β, Sig_t⟩ = a + b·X_t
+
+        where X_t = ⟨ℓ_X, Sig_t⟩ is given by the from_sde operator.
+
+        For the SDE:
+            dXₜ = (a + bXₜ)dt + (α + βXₜ)dWₜ,  X₀ = x₀
+
+        The drift functional is:
+            β = a·[1,0,0,...] + b·ℓ_X
+
+        where ℓ_X is the solution operator from from_sde and [1,0,0,...] is
+        the constant functional.
+
+        Parameters:
+        -----------
+        dimension : int
+            Dimension of the path space (for time-space augmentation)
+        level : int
+            Truncation level
+        x0 : float
+            Initial condition
+        a : float
+            Constant drift coefficient
+        b : float
+            Linear drift coefficient (feedback)
+        alpha : float
+            Constant diffusion coefficient
+        beta : float
+            Linear diffusion coefficient
+
+        Returns:
+        --------
+        SignatureLinearOperatorBuilder
+            Builder for the drift functional
+        """
+        # First, get the solution operator ℓ_X for X_t
+        ell_X_builder = cls.from_sde(dimension, level, x0, a, b, alpha, beta)
+        ell_X = ell_X_builder.build()
+
+        # Construct drift functional: β = a·e_0 + b·ℓ_X
+        # where e_0 = [1, 0, 0, ...] is the constant functional
+        builder = cls(dimension, level)
+        drift_coeffs = np.zeros(builder.sig_length)
+
+        # Constant term: a times the constant functional
+        drift_coeffs[0] = a
+
+        # Linear term: b times the solution operator
+        drift_coeffs += b * ell_X.coeffs
+
+        builder._coeffs = drift_coeffs
+        return builder
+
+    @classmethod
+    def diffusion_functional_from_sde(
+        cls,
+        dimension: int,
+        level: int,
+        x0: float,
+        a: float,
+        b: float,
+        alpha: float,
+        beta: float,
+    ):
+        """
+        Construct the analytical diffusion functional α such that:
+            diffusion²(Sig_t) = ⟨α, Sig_t⟩ = (α + β·X_t)²
+
+        where X_t = ⟨ℓ_X, Sig_t⟩ is given by the from_sde operator.
+
+        For the SDE:
+            dXₜ = (a + bXₜ)dt + (α + βXₜ)dWₜ,  X₀ = x₀
+
+        The diffusion functional (variance) is:
+            α_func = α² + 2·α·β·ℓ_X + β²·(ℓ_X ⊗ ℓ_X)
+
+        However, the last term (ℓ_X ⊗ ℓ_X) involves products of signature terms,
+        which is a QUADRATIC functional, not linear. This is only exact for β=0.
+
+        For β ≠ 0, we approximate by ignoring the quadratic term:
+            α_func ≈ α² + 2·α·β·ℓ_X
+
+        Parameters:
+        -----------
+        dimension : int
+            Dimension of the path space (for time-space augmentation)
+        level : int
+            Truncation level
+        x0 : float
+            Initial condition
+        a : float
+            Constant drift coefficient
+        b : float
+            Linear drift coefficient (feedback)
+        alpha : float
+            Constant diffusion coefficient
+        beta : float
+            Linear diffusion coefficient
+
+        Returns:
+        --------
+        SignatureLinearOperatorBuilder
+            Builder for the (linearized) diffusion functional
+
+        Warnings:
+        ---------
+        This is only exact for β=0 (constant volatility). For β≠0, the true
+        diffusion functional is quadratic in the signature.
+        """
+        # Get the solution operator ℓ_X for X_t
+        ell_X_builder = cls.from_sde(dimension, level, x0, a, b, alpha, beta)
+        ell_X = ell_X_builder.build()
+
+        # Construct diffusion functional: α_func ≈ α² + 2·α·β·ℓ_X
+        builder = cls(dimension, level)
+        diffusion_coeffs = np.zeros(builder.sig_length)
+
+        # Constant term: α²
+        diffusion_coeffs[0] = alpha**2
+
+        # Linear term: 2·α·β·ℓ_X
+        if beta != 0:
+            import warnings
+
+            warnings.warn(
+                f"Diffusion functional for β={beta}≠0 is approximate. "
+                f"True functional is quadratic, not linear.",
+                UserWarning,
+            )
+            diffusion_coeffs += 2 * alpha * beta * ell_X.coeffs
+
+        builder._coeffs = diffusion_coeffs
+        return builder
 
     # </editor-fold>
