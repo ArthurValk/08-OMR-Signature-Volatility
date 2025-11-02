@@ -7,8 +7,12 @@ as the theoretical from_sde construction.
 import numpy as np
 import matplotlib
 
+from scripts import (
+    analytical_solution_gbm,
+    analytical_solution_ou,
+    index_to_word,
+)
 from output import SAVE_PATH
-from scripts import analytical_solution_gbm, analytical_solution_ou
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -118,17 +122,26 @@ def main():
             alpha=0.8,
             color="red",
         )
-        axes[0, idx].set_xlabel("Coefficient Index")
+
+        # Generate word labels for x-axis
+        dimension = 2  # Time-augmented path has dimension 2
+        word_labels = [index_to_word(i, dimension, level) for i in indices]
+
+        axes[0, idx].set_xlabel("Signature Term")
         axes[0, idx].set_ylabel("Value")
         axes[0, idx].set_title(f"GBM Level {level}: Operator Coefficients")
+        axes[0, idx].set_xticks(indices)
+        axes[0, idx].set_xticklabels(word_labels, rotation=45, ha="right")
         axes[0, idx].legend()
         axes[0, idx].grid(True, alpha=0.3, axis="y")
 
         # Plot coefficient differences
         axes[1, idx].bar(indices, np.abs(coeff_diff), color="purple", alpha=0.7)
-        axes[1, idx].set_xlabel("Coefficient Index")
+        axes[1, idx].set_xlabel("Signature Term")
         axes[1, idx].set_ylabel("Absolute Difference")
         axes[1, idx].set_title(f"Max Diff: {max_diff:.2e}")
+        axes[1, idx].set_xticks(indices)
+        axes[1, idx].set_xticklabels(word_labels, rotation=45, ha="right")
         axes[1, idx].grid(True, alpha=0.3, axis="y")
         if max_diff > 0:
             axes[1, idx].set_yscale("log")
@@ -140,6 +153,7 @@ def main():
     print()
 
     # Test 2: Ornstein-Uhlenbeck Process
+    np.random.seed(42)
     print("Test 2: Ornstein-Uhlenbeck Process")
     print("-" * 70)
 
@@ -218,17 +232,26 @@ def main():
             alpha=0.8,
             color="red",
         )
-        axes[0, idx].set_xlabel("Coefficient Index")
+
+        # Generate word labels for x-axis
+        dimension = 2  # Time-augmented path has dimension 2
+        word_labels = [index_to_word(i, dimension, level) for i in indices]
+
+        axes[0, idx].set_xlabel("Signature Term")
         axes[0, idx].set_ylabel("Value")
         axes[0, idx].set_title(f"OU Level {level}: Operator Coefficients")
+        axes[0, idx].set_xticks(indices)
+        axes[0, idx].set_xticklabels(word_labels, rotation=45, ha="right")
         axes[0, idx].legend()
         axes[0, idx].grid(True, alpha=0.3, axis="y")
 
         # Plot coefficient differences
-        axes[1, idx].bar(indices, np.abs(coeff_diff), color="orange", alpha=0.7)
-        axes[1, idx].set_xlabel("Coefficient Index")
+        axes[1, idx].bar(indices, np.abs(coeff_diff), color="purple", alpha=0.7)
+        axes[1, idx].set_xlabel("Signature Term")
         axes[1, idx].set_ylabel("Absolute Difference")
         axes[1, idx].set_title(f"Max Diff: {max_diff:.2e}")
+        axes[1, idx].set_xticks(indices)
+        axes[1, idx].set_xticklabels(word_labels, rotation=45, ha="right")
         axes[1, idx].grid(True, alpha=0.3, axis="y")
         if max_diff > 0:
             axes[1, idx].set_yscale("log")
