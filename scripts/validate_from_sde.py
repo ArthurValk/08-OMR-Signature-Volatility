@@ -7,10 +7,14 @@ and that X_t = ⟨ℓ, Sig[Ŵ]⟩ matches analytical solutions.
 import numpy as np
 import matplotlib.pyplot as plt
 
-from output import SAVE_PATH
-from scripts import analytical_solution_gbm, analytical_solution_ou
 from signature_vol.exact.linear_operator import SignatureLinearOperatorBuilder
 from signature_vol.exact.batch_signature import BatchSignature
+from scripts import (
+    analytical_solution_gbm,
+    analytical_solution_ou,
+    index_to_word,
+)
+from output import SAVE_PATH
 
 
 def main():
@@ -53,9 +57,10 @@ def main():
     # Test at different truncation levels
     levels = [1, 2, 3]
 
-    fig, axes = plt.subplots(3, len(levels), figsize=(18, 14))
+    # Store results for all levels
+    results = []
 
-    for idx, level in enumerate(levels):
+    for level in levels:
         print(f"  Level {level}:")
 
         # Construct operator using from_sde
@@ -84,55 +89,111 @@ def main():
         print(f"    Mean error: {mean_error:.6e}")
         print()
 
-        # Plot path comparison
-        axes[0, idx].plot(
-            times[1:], X_analytical, "k-", label="Analytical", linewidth=2
+        results.append(
+            {
+                "level": level,
+                "X_analytical": X_analytical,
+                "X_signature": X_signature,
+                "error": error,
+                "max_error": max_error,
+                "ell": ell,
+            }
         )
-        axes[0, idx].plot(
-            times[1:], X_signature, "r--", label="Signature", linewidth=1.5, alpha=0.7
+
+    # Create one figure with three subplots in a row
+    # Define colors and line styles for different levels
+    colors = ["blue", "green", "red"]
+    linestyles = ["-", "--", ":"]
+
+    fig, axes = plt.subplots(1, 3, figsize=(18, 5))
+
+    # Subplot 1: Path comparison - all levels on one plot
+    ax1 = axes[0]
+    # Plot analytical solution (same for all levels, so plot once)
+    ax1.plot(
+        times[1:], results[0]["X_analytical"], "k-", label="Analytical", linewidth=2
+    )
+    # Plot signature reconstruction for each level
+    for idx, res in enumerate(results):
+        ax1.plot(
+            times[1:],
+            res["X_signature"],
+            color=colors[idx],
+            linestyle=linestyles[idx],
+            label=f"Signature (Level {res['level']})",
+            linewidth=1.5,
+            alpha=0.8,
         )
-        axes[0, idx].set_xlabel("Time")
-        axes[0, idx].set_ylabel("X(t)")
-        axes[0, idx].set_title(f"GBM: Level {level}")
-        axes[0, idx].legend()
-        axes[0, idx].grid(True, alpha=0.3)
+    ax1.set_xlabel("Time")
+    ax1.set_ylabel("X(t)")
+    ax1.set_title("GBM: Path Comparison")
+    ax1.legend()
+    ax1.grid(True, alpha=0.3)
 
-        # Plot error
-        axes[1, idx].plot(times[1:], error, "b-", linewidth=1)
-        axes[1, idx].set_xlabel("Time")
-        axes[1, idx].set_ylabel("Absolute Error")
-        axes[1, idx].set_title(f"Error (Max: {max_error:.2e})")
-        axes[1, idx].grid(True, alpha=0.3)
-        if max_error > 0:
-            axes[1, idx].set_yscale("log")
+    # Subplot 2: Error plots - all levels on one plot
+    ax2 = axes[1]
+    for idx, res in enumerate(results):
+        ax2.plot(
+            times[1:],
+            res["error"],
+            color=colors[idx],
+            linestyle=linestyles[idx],
+            label=f"Level {res['level']} (Max: {res['max_error']:.2e})",
+            linewidth=1.5,
+        )
+    ax2.set_xlabel("Time")
+    ax2.set_ylabel("Absolute Error")
+    ax2.set_title("GBM: Reconstruction Error")
+    ax2.set_yscale("log")
+    ax2.legend()
+    ax2.grid(True, alpha=0.3)
 
-        # Plot operator coefficients
-        coeff_indices = np.arange(len(ell.coeffs))
-        axes[2, idx].bar(coeff_indices, np.abs(ell.coeffs), color="green", alpha=0.7)
-        axes[2, idx].set_xlabel("Coefficient Index")
-        axes[2, idx].set_ylabel("Absolute Value")
-        axes[2, idx].set_title("Linear Operator Structure")
-        axes[2, idx].grid(True, alpha=0.3, axis="y")
-        if np.any(ell.coeffs != 0):
-            axes[2, idx].set_yscale("log")
+    # Subplot 3: Operator coefficients - all levels combined
+    ax3 = axes[2]
+    # Determine the maximum number of coefficients across all levels
+    max_coeffs = max(len(res["ell"].coeffs) for res in results)
 
-        # Add signature term labels
-        if level == 1:
-            labels = ["ø", "1", "2"]
-            axes[2, idx].set_xticks(coeff_indices)
-            axes[2, idx].set_xticklabels(labels)
-        elif level == 2:
-            labels = ["ø", "1", "2", "11", "12", "21", "22"]
-            axes[2, idx].set_xticks(coeff_indices)
-            axes[2, idx].set_xticklabels(labels, rotation=45)
+    # Width of bars and positions
+    bar_width = 0.25
+    x_positions = np.arange(max_coeffs)
+
+    # Plot bars for each level
+    for idx, res in enumerate(results):
+        n_coeffs = len(res["ell"].coeffs)
+        offset = (idx - 1) * bar_width  # Center the bars
+        ax3.bar(
+            x_positions[:n_coeffs] + offset,
+            np.abs(res["ell"].coeffs),
+            width=bar_width,
+            color=colors[idx],
+            alpha=0.7,
+            label=f"Level {res['level']}",
+        )
+
+    ax3.set_xlabel("Coefficient Index")
+    ax3.set_ylabel("Absolute Value")
+    ax3.set_title("Linear Operator Structure")
+    ax3.set_yscale("log")
+    ax3.legend()
+    ax3.grid(True, alpha=0.3, axis="y")
+
+    # Generate word labels using index_to_word function
+    dimension = 2  # Time-augmented path has dimension 2
+    max_level = max(res["level"] for res in results)
+    # Show labels for all coefficients
+    word_labels = [index_to_word(i, dimension, max_level) for i in range(max_coeffs)]
+    ax3.set_xticks(x_positions)
+    ax3.set_xticklabels(word_labels, rotation=45, ha="right")
 
     plt.tight_layout()
     save_path_gbm = SAVE_PATH / "validate_from_sde_gbm.png"
     plt.savefig(save_path_gbm, dpi=150, bbox_inches="tight")
     print(f"GBM validation plot saved to: {save_path_gbm}")
+    plt.close(fig)
     print()
 
     # Test 2: Ornstein-Uhlenbeck Process
+    np.random.seed(42)
     print("Test 2: Ornstein-Uhlenbeck Process")
     print("-" * 70)
 
@@ -146,9 +207,13 @@ def main():
 
     # For OU, we have a=0, b=-theta, alpha=sigma, beta=0
 
-    fig, axes = plt.subplots(3, len(levels), figsize=(18, 14))
+    # Test at different truncation levels (including level 4 for OU)
+    levels_ou = [1, 2, 3, 4]
 
-    for idx, level in enumerate(levels):
+    # Store results for all levels
+    results_ou = []
+
+    for level in levels_ou:
         print(f"  Level {level}:")
 
         # Construct operator using from_sde
@@ -184,58 +249,109 @@ def main():
         print(f"    Mean error: {mean_error:.6e}")
         print()
 
-        # Plot path comparison
-        axes[0, idx].plot(
-            times[1:], X_analytical, "k-", label="Analytical", linewidth=2
+        results_ou.append(
+            {
+                "level": level,
+                "X_analytical": X_analytical,
+                "X_signature": X_signature,
+                "error": error,
+                "max_error": max_error,
+                "ell": ell,
+            }
         )
-        axes[0, idx].plot(
-            times[1:], X_signature, "r--", label="Signature", linewidth=1.5, alpha=0.7
+
+    # Create one figure with three subplots in a row
+    # Define colors and line styles for OU (4 levels)
+    colors_ou = ["blue", "green", "red", "purple"]
+    linestyles_ou = ["-", "--", ":", "-."]
+
+    fig_ou, axes_ou = plt.subplots(1, 3, figsize=(18, 5))
+
+    # Subplot 1: Path comparison - all levels on one plot
+    ax1_ou = axes_ou[0]
+    # Plot analytical solution (same for all levels, so plot once)
+    ax1_ou.plot(
+        times[1:], results_ou[0]["X_analytical"], "k-", label="Analytical", linewidth=2
+    )
+    # Plot signature reconstruction for each level
+    for idx, res in enumerate(results_ou):
+        ax1_ou.plot(
+            times[1:],
+            res["X_signature"],
+            color=colors_ou[idx],
+            linestyle=linestyles_ou[idx],
+            label=f"Signature (Level {res['level']})",
+            linewidth=1.5,
+            alpha=0.8,
         )
-        axes[0, idx].axhline(
-            y=0, color="gray", linestyle=":", alpha=0.5, label="Mean level"
+    ax1_ou.axhline(y=0, color="gray", linestyle=":", alpha=0.5, label="Mean level")
+    ax1_ou.set_xlabel("Time")
+    ax1_ou.set_ylabel("X(t)")
+    ax1_ou.set_title("OU Process: Path Comparison")
+    ax1_ou.legend()
+    ax1_ou.grid(True, alpha=0.3)
+
+    # Subplot 2: Error plots - all levels on one plot
+    ax2_ou = axes_ou[1]
+    for idx, res in enumerate(results_ou):
+        ax2_ou.plot(
+            times[1:],
+            res["error"],
+            color=colors_ou[idx],
+            linestyle=linestyles_ou[idx],
+            label=f"Level {res['level']} (Max: {res['max_error']:.2e})",
+            linewidth=1.5,
         )
-        axes[0, idx].set_xlabel("Time")
-        axes[0, idx].set_ylabel("X(t)")
-        axes[0, idx].set_title(f"OU Process: Level {level}")
-        axes[0, idx].legend()
-        axes[0, idx].grid(True, alpha=0.3)
+    ax2_ou.set_xlabel("Time")
+    ax2_ou.set_ylabel("Absolute Error")
+    ax2_ou.set_title("OU Process: Reconstruction Error")
+    ax2_ou.set_yscale("log")
+    ax2_ou.legend()
+    ax2_ou.grid(True, alpha=0.3)
 
-        # Plot error
-        axes[1, idx].plot(times[1:], error, "b-", linewidth=1)
-        axes[1, idx].set_xlabel("Time")
-        axes[1, idx].set_ylabel("Absolute Error")
-        axes[1, idx].set_title(f"Error (Max: {max_error:.2e})")
-        axes[1, idx].grid(True, alpha=0.3)
-        if max_error > 0:
-            axes[1, idx].set_yscale("log")
+    # Subplot 3: Operator coefficients - all levels combined
+    ax3_ou = axes_ou[2]
+    # Determine the maximum number of coefficients across all levels
+    max_coeffs_ou = max(len(res["ell"].coeffs) for res in results_ou)
 
-        # Plot operator coefficients
-        coeff_indices = np.arange(len(ell.coeffs))
-        axes[2, idx].bar(coeff_indices, np.abs(ell.coeffs), color="purple", alpha=0.7)
-        axes[2, idx].set_xlabel("Coefficient Index")
-        axes[2, idx].set_ylabel("Absolute Value")
-        axes[2, idx].set_title("Linear Operator Structure")
-        axes[2, idx].grid(True, alpha=0.3, axis="y")
-        if np.any(ell.coeffs != 0):
-            axes[2, idx].set_yscale("log")
+    # Width of bars and positions
+    bar_width_ou = 0.2  # Slightly narrower bars for 4 levels
+    x_positions_ou = np.arange(max_coeffs_ou)
 
-        # Add signature term labels
-        if level == 1:
-            labels = ["ø", "1", "2"]
-            axes[2, idx].set_xticks(coeff_indices)
-            axes[2, idx].set_xticklabels(labels)
-        elif level == 2:
-            labels = ["ø", "1", "2", "11", "12", "21", "22"]
-            axes[2, idx].set_xticks(coeff_indices)
-            axes[2, idx].set_xticklabels(labels, rotation=45)
-        elif level == 3:
-            # For level 3, just show indices
-            axes[2, idx].set_xticks(coeff_indices[::2])  # Show every other index
+    # Plot bars for each level
+    for idx, res in enumerate(results_ou):
+        n_coeffs = len(res["ell"].coeffs)
+        offset = (idx - 1.5) * bar_width_ou  # Center the bars around each position
+        ax3_ou.bar(
+            x_positions_ou[:n_coeffs] + offset,
+            np.abs(res["ell"].coeffs),
+            width=bar_width_ou,
+            color=colors_ou[idx],
+            alpha=0.7,
+            label=f"Level {res['level']}",
+        )
+
+    ax3_ou.set_xlabel("Coefficient Index")
+    ax3_ou.set_ylabel("Absolute Value")
+    ax3_ou.set_title("Linear Operator Structure")
+    ax3_ou.set_yscale("log")
+    ax3_ou.legend()
+    ax3_ou.grid(True, alpha=0.3, axis="y")
+
+    # Generate word labels using index_to_word function
+    max_level_ou = max(res["level"] for res in results_ou)
+    # Show labels for all coefficients
+    word_labels_ou = [
+        index_to_word(i, dimension, max_level_ou) for i in range(max_coeffs_ou)
+    ]
+    ax3_ou.set_xticks(x_positions_ou)
+    ax3_ou.set_xticklabels(word_labels_ou, rotation=45, ha="right")
 
     plt.tight_layout()
     save_path_ou = SAVE_PATH / "validate_from_sde_ou.png"
     plt.savefig(save_path_ou, dpi=150, bbox_inches="tight")
     print(f"OU validation plot saved to: {save_path_ou}")
+    plt.close(fig_ou)
 
 
 if __name__ == "__main__":
