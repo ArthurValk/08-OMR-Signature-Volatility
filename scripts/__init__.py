@@ -43,3 +43,44 @@ def analytical_solution_gbm(
     Solution: X_t = x_0 + (mu - sigma^2/2)*t + sigma*W_t
     """
     return x0 + (mu - 0.5 * sigma**2) * t + sigma * W
+
+
+def index_to_word(index: int, dimension: int, level: int) -> str:
+    """Convert signature term index to word representation.
+
+    Parameters
+    ----------
+    index : int
+        Index in the signature array
+    dimension : int
+        Dimension of the path space
+    level : int
+        Truncation level
+
+    Returns
+    -------
+    str
+        Word representation (e.g., "∅", "1", "2", "11", "12", etc.)
+    """
+    if index == 0:
+        return "∅"
+
+    # Count terms at each level to find which level this index belongs to
+    current_index = 1  # Start after the emptyset term
+    for word_length in range(1, level + 1):
+        terms_at_level = dimension**word_length
+        if index < current_index + terms_at_level:
+            # This index is at this level
+            # Find which word within this level
+            position = index - current_index
+
+            # Convert position to base-dimension representation
+            word = []
+            for _ in range(word_length):
+                word.append(str((position % dimension) + 1))
+                position //= dimension
+            return "".join(reversed(word))
+
+        current_index += terms_at_level
+
+    return str(index)  # Fallback
