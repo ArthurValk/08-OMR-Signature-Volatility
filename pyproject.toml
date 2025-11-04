@@ -3,6 +3,10 @@ name = "signature-vol"
 version = "0.1.0"
 description = "Signature volatility"
 requires-python = ">=3.9,<3.10"
+authors = [
+    {name = "Arthur Valk", email = "arthur.h.p.valk@gmail.com"},
+    {name = "Marta", email = "idk"},
+]
 
 dependencies = [
     "iisignature==0.24",
@@ -29,7 +33,6 @@ dev-dependencies = [
 
 [tool.coverage.run]
 source = ["signature_vol"]
-omit = ["signature_vol/examples/*"]
 
 [tool.coverage.report]
 show_missing = true

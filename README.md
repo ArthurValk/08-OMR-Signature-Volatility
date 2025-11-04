@@ -4,7 +4,7 @@ Welcome to the repository for the 2025-2026 SEM1 OMR project on signature volati
 
 ## Overview
 
-This project focuses on [add brief description of the project goals and objectives].
+This project focuses on using signature based models to analyze and predict the volatility of financial time series data.
 
 ## Prerequisites
 
@@ -24,7 +24,7 @@ pip install uv
 3. Activate the virtual environment:
    ```bash
    # On Windows:
-   venv\Scripts\activate
+   .venv\Scripts\activate
    # On macOS/Linux:
-   source venv/bin/activate
+   source .venv/bin/activate
    ```
