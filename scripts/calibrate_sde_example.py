@@ -44,55 +44,66 @@ targets = np.array(targets)
 # Compute signatures using calibrate_signature_sde
 eps = 1e-8
 log_targets = np.log(targets + eps)
-sig_order = 3
 
-X_list = []
-for path_segment in paths:
-    times_segment = np.arange(len(path_segment))
-    cumsum_col = path_segment[:, 2]
+# Specify truncation levels to test
+truncation_levels = [2, 3, 4]
 
-    beta, alpha, sigs = calibrate_signature_sde(
-        X=cumsum_col, times=times_segment, sig_order=sig_order, window_length=None
+# Process each truncation level
+for sig_order in truncation_levels:
+    print(f"\nProcessing truncation level {sig_order}...")
+
+    X_list = []
+    for path_segment in paths:
+        times_segment = np.arange(len(path_segment))
+        cumsum_col = path_segment[:, 2]
+
+        beta, alpha, sigs = calibrate_signature_sde(
+            X=cumsum_col, times=times_segment, sig_order=sig_order, window_length=None
+        )
+
+        signature_features = sigs.array[-1, :]
+        X_list.append(signature_features)
+
+    X = np.vstack(X_list)
+
+    # Train model with time-series cross-validation
+    tscv = TimeSeriesSplit(n_splits=5)
+    model = Pipeline([("scale", StandardScaler()), ("clf", LinearRegression())])
+
+    mse_scores = []
+    for train_idx, test_idx in tscv.split(X):
+        model.fit(X[train_idx], targets[train_idx])
+        pred = model.predict(X[test_idx])
+        mse_scores.append(mean_squared_error(targets[test_idx], pred))
+
+    print(
+        f"Truncation level {sig_order} - CV MSE: {np.mean(mse_scores):.6f}, std: {np.std(mse_scores):.6f}"
     )
 
-    signature_features = sigs.array[-1, :]
-    X_list.append(signature_features)
+    # Final fit on full data
+    model.fit(X, log_targets)
+    pred_log = model.predict(X)
+    pred = np.exp(pred_log)
 
-X = np.vstack(X_list)
+    # Visualization
+    plt.figure(figsize=(10, 5))
+    plt.xlim(0, 200)
+    plt.plot(targets, label="Actual realized volatility", color="black", linewidth=2)
+    plt.plot(
+        pred,
+        label=f"Predicted volatility (truncation level {sig_order})",
+        color="dodgerblue",
+        linewidth=2,
+        alpha=0.8,
+    )
+    plt.xlabel("Time index")
+    plt.ylabel("Volatility")
+    plt.title(
+        f"Signature-SDE Volatility Model vs Actual Volatility (Truncation Level {sig_order})"
+    )
+    plt.legend()
+    plt.grid(True, alpha=0.3)
 
-# Train model with time-series cross-validation
-tscv = TimeSeriesSplit(n_splits=5)
-model = Pipeline([("scale", StandardScaler()), ("clf", LinearRegression())])
-
-mse_scores = []
-for train_idx, test_idx in tscv.split(X):
-    model.fit(X[train_idx], targets[train_idx])
-    pred = model.predict(X[test_idx])
-    mse_scores.append(mean_squared_error(targets[test_idx], pred))
-
-print("CV MSE:", np.mean(mse_scores), "std:", np.std(mse_scores))
-
-# Final fit on full data
-model.fit(X, log_targets)
-pred_log = model.predict(X)
-pred = np.exp(pred_log)
-
-# Visualization
-plt.figure(figsize=(10, 5))
-plt.xlim(0, 200)
-plt.plot(targets, label="Actual realized volatility", color="black", linewidth=2)
-plt.plot(
-    pred,
-    label="Predicted volatility (signature-SDE model)",
-    color="dodgerblue",
-    linewidth=2,
-    alpha=0.8,
-)
-plt.xlabel("Time index")
-plt.ylabel("Volatility")
-plt.title("Signature-SDE Volatility Model vs Actual Volatility")
-plt.legend()
-plt.grid(True, alpha=0.3)
-
-save_path = SAVE_PATH / "aapl_signature_sde_calibration.png"
-plt.savefig(save_path, dpi=150, bbox_inches="tight")
+    save_path = SAVE_PATH / f"aapl_signature_calibration_level_{sig_order}.png"
+    plt.savefig(save_path, dpi=150, bbox_inches="tight")
+    print(f"Saved plot to {save_path}")
