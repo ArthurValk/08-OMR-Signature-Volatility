@@ -352,6 +352,102 @@ def main():
     plt.savefig(save_path_ou, dpi=150, bbox_inches="tight")
     print(f"OU validation plot saved to: {save_path_ou}")
     plt.close(fig_ou)
+    # ------------------------------------------------------------------
+    # Extra: compare GBM vs OU — MSE and R^2 vs signature depth
+    # ------------------------------------------------------------------
+    print()
+    print("Comparison: GBM vs OU (MSE and R^2 vs signature depth)")
+    print("-" * 70)
+
+    from sklearn.metrics import mean_squared_error, r2_score
+
+    levels_comp = [1, 2, 3, 4, 5]
+    gbm_mse, ou_mse = [], []
+    gbm_r2, ou_r2 = [], []
+
+    for level in levels_comp:
+        # --- GBM operator and predictions ---
+        ell_gbm = (
+            SignatureLinearOperatorBuilder.from_sde(
+                dimension=2,
+                level=level,
+                x0=x0_gbm,
+                a=a_gbm,
+                b=0.0,
+                alpha=sigma,
+                beta=0.0,
+            )
+            .build()
+        )
+        sigs = BatchSignature.from_streaming_path(time_brownian_path, level=level)
+        X_sig_gbm = sigs.array @ ell_gbm.coeffs
+        X_anal_gbm = analytical_solution_gbm(times[1:], W[1:], x0_gbm, mu, sigma)
+
+        # Compute MSE and R^2
+        mse_gbm = mean_squared_error(X_anal_gbm, X_sig_gbm)
+        r2_gbm = r2_score(X_anal_gbm, X_sig_gbm)
+        gbm_mse.append(mse_gbm)
+        gbm_r2.append(r2_gbm)
+
+        # --- OU operator and predictions ---
+        ell_ou = (
+            SignatureLinearOperatorBuilder.from_sde(
+                dimension=2,
+                level=level,
+                x0=x0_ou,
+                a=0.0,
+                b=-theta,
+                alpha=sigma_ou,
+                beta=0.0,
+            )
+            .build()
+        )
+        X_sig_ou = sigs.array @ ell_ou.coeffs
+        X_anal_ou = analytical_solution_ou(times, W, x0_ou, theta, sigma_ou)[1:]
+
+        mse_ou = mean_squared_error(X_anal_ou, X_sig_ou)
+        r2_ou = r2_score(X_anal_ou, X_sig_ou)
+        ou_mse.append(mse_ou)
+        ou_r2.append(r2_ou)
+
+        print(
+            f"Level {level}: GBM (MSE={mse_gbm:.3e}, R2={r2_gbm:.4f}) | "
+            f"OU (MSE={mse_ou:.3e}, R2={r2_ou:.4f})"
+        )
+
+    # --- Plot combined comparison ---
+    fig, ax1 = plt.subplots(figsize=(8, 5))
+
+    # Left axis: log MSE
+    ax1.plot(levels_comp, gbm_mse, "o-", color="tab:blue", label="GBM MSE")
+    ax1.plot(levels_comp, ou_mse, "s--", color="tab:orange", label="OU MSE")
+    ax1.set_yscale("log")
+    ax1.set_xlabel("Signature depth")
+    ax1.set_ylabel("Mean Squared Error (log scale)", color="tab:blue")
+    ax1.tick_params(axis="y", labelcolor="tab:blue")
+    ax1.grid(True, alpha=0.3)
+
+    # Right axis: R²
+    ax2 = ax1.twinx()
+    ax2.plot(levels_comp, gbm_r2, "o-", color="tab:cyan", label="GBM R²")
+    ax2.plot(levels_comp, ou_r2, "s--", color="tab:red", label="OU R²")
+    ax2.set_ylabel("$R^2$", color="tab:red")
+    ax2.tick_params(axis="y", labelcolor="tab:red")
+    ax2.set_ylim(0, 1.05)
+
+    # Title and legend
+    fig.suptitle("Approximation quality vs signature depth: GBM vs OU", fontsize=12)
+    lines_1, labels_1 = ax1.get_legend_handles_labels()
+    lines_2, labels_2 = ax2.get_legend_handles_labels()
+    ax1.legend(lines_1 + lines_2, labels_1 + labels_2, loc="lower right")
+
+    plt.tight_layout()
+    save_path_comp = SAVE_PATH / "compare_gbm_ou_mse_r2_vs_depth.png"
+    plt.savefig(save_path_comp, dpi=150, bbox_inches="tight")
+    print(f"GBM/OU MSE–R² comparison plot saved to: {save_path_comp}")
+
+
+
 
 
 if __name__ == "__main__":
