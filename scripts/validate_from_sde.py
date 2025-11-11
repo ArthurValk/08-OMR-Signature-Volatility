@@ -42,7 +42,7 @@ def main():
     print("=" * 70)
     print()
 
-    # Test 1: Geometric Brownian Motion (GBM)
+    # region Test 1: Geometric Brownian Motion (GBM)
     print("Test 1: Geometric Brownian Motion")
     print("-" * 70)
 
@@ -194,8 +194,9 @@ def main():
     print(f"GBM validation plot saved to: {save_path_gbm}")
     plt.close(fig)
     print()
+    # endregion
 
-    # Test 2: Ornstein-Uhlenbeck Process
+    # region Test 2: Ornstein-Uhlenbeck Process
     np.random.seed(42)
     print("Test 2: Ornstein-Uhlenbeck Process")
     print("-" * 70)
@@ -355,9 +356,9 @@ def main():
     plt.savefig(save_path_ou, dpi=150, bbox_inches="tight")
     print(f"OU validation plot saved to: {save_path_ou}")
     plt.close(fig_ou)
-    # ------------------------------------------------------------------
-    # Extra: compare GBM vs OU — MSE and R^2 vs signature depth
-    # ------------------------------------------------------------------
+    # endregion
+
+    # region Test 3: Truncation error comparison (GBM vs OU)
     print()
     print("Comparison: GBM vs OU (MSE and R^2 vs signature depth)")
     print("-" * 70)
@@ -477,12 +478,13 @@ def main():
     ax.legend(loc="upper right")
 
     # Title
-    fig.suptitle("Approximation quality vs signature depth: GBM vs OU", fontsize=12)
+    fig.suptitle("Truncation error vs signature depth: GBM vs OU", fontsize=12)
 
     plt.tight_layout()
     save_path_comp = SAVE_PATH / "compare_gbm_ou_mse_r2_vs_depth.png"
     plt.savefig(save_path_comp, dpi=150, bbox_inches="tight")
     print(f"GBM/OU MSE–R² comparison plot saved to: {save_path_comp}")
+    # endregion
 
 
 if __name__ == "__main__":
