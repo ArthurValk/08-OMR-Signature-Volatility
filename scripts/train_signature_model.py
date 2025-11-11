@@ -1,29 +1,16 @@
 # scripts/train_signature_model.py
-import numpy as np
-
 from output import SAVE_PATH
-from signature_vol.exact.signature import Signature  # your class file
+from signature_vol.exact.signature import Signature
 
-paths = [
-    np.random.randn(100, 2),  # example 2D paths
-    np.random.randn(120, 2),
-]
-
-signatures = [Signature.from_path(path, level=3) for path in paths]
-
-# Example: access signature array of the first path
-print(signatures[0].array)
-
-
-import iisignature  # type: ignore
-import matplotlib
 import numpy as np
-import yfinance as yf
 from sklearn.linear_model import LinearRegression
-from sklearn.metrics import mean_squared_error, r2_score
 from sklearn.model_selection import TimeSeriesSplit
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import mean_squared_error, r2_score
+import yfinance as yf
+
+import matplotlib
 
 matplotlib.use("Agg")
 
@@ -43,6 +30,7 @@ window = 50  # length of path (timesteps)
 horizon = 10  # predict next-horizon realized vol?
 paths = []
 targets = []
+target_dates = []
 for i in range(len(df) - window - horizon + 1):
     segment = df["logret"].values[i : i + window]
     # richer 3D path: returns, abs(returns), cumulative sum
@@ -52,8 +40,11 @@ for i in range(len(df) - window - horizon + 1):
     realized_vol = np.sqrt(np.mean(fut**2))
     targets.append(np.sqrt(np.mean(fut**2)))  # RMSE-style realized vol
     paths.append(path)
+    # Store the date corresponding to this target (end of the forecast horizon)
+    target_dates.append(df["timestamp"].iloc[i + window + horizon - 1])
 
 targets = np.array(targets)
+target_dates = np.array(target_dates)
 
 # --- 3. compute signatures for each path ---
 # --- 3. Predict log-vol instead of vol ---
@@ -69,52 +60,102 @@ import matplotlib.pyplot as plt
 for depth in truncation_levels:
     print(f"\nProcessing truncation level {depth}...")
 
-    # compute signature length needed and create a signature transform
-    sig_dim = paths[0].shape[1]
-    sig_len = iisignature.siglength(sig_dim, depth)
-    X = np.vstack([iisignature.sig(p, depth) for p in paths])
+    # Compute signatures using Signature.from_path
+    signatures = [Signature.from_path(p, depth) for p in paths]
+    X = np.vstack([sig.array for sig in signatures])
 
     # --- 4. Train a model with time-series cross-validation ---
     tscv = TimeSeriesSplit(n_splits=5)
     model = Pipeline([("scale", StandardScaler()), ("clf", LinearRegression())])
 
     mse_scores = []
+    all_predictions = np.full(len(targets), np.nan)
     for train_idx, test_idx in tscv.split(X):
-        model.fit(X[train_idx], targets[train_idx])
-        pred = model.predict(X[test_idx])
+        model.fit(X[train_idx], log_targets[train_idx])
+        pred_log = model.predict(X[test_idx])
+        pred = np.exp(pred_log)
+        all_predictions[test_idx] = pred
         mse_scores.append(mean_squared_error(targets[test_idx], pred))
 
     print(
         f"Truncation level {depth} - CV MSE: {np.mean(mse_scores):.6f}, std: {np.std(mse_scores):.6f}"
     )
 
-    # Final fit on full data
-    model.fit(X, log_targets)
-    pred_log = model.predict(X)
-    pred = np.exp(pred_log)
-
-    # Visualization
-    plt.figure(figsize=(10, 5))
-    plt.xlim(0, 200)
-    plt.plot(targets, label="Actual realized volatility", color="black", linewidth=2)
-    plt.plot(
-        pred,
-        label=f"Predicted volatility (truncation level {depth})",
+    # Visualization: Out-of-sample forecasts from cross-validation
+    fig2, ax2 = plt.subplots(figsize=(12, 6))
+    ax2.plot(
+        target_dates,
+        targets,
+        label="Actual realized volatility",
+        color="black",
+        linewidth=2,
+        alpha=0.7,
+    )
+    ax2.plot(
+        target_dates,
+        all_predictions,
+        label=f"Out-of-sample forecast (truncation level {depth})",
         color="dodgerblue",
         linewidth=2,
         alpha=0.8,
     )
-    plt.xlabel("Time index")
-    plt.ylabel("Volatility")
-    plt.title(
-        f"Signature-based Volatility Model vs Actual Volatility (Truncation Level {depth})"
-    )
-    plt.legend()
-    plt.grid(True, alpha=0.3)
 
-    save_path = SAVE_PATH / f"aapl_pure_data_calibration_level_{depth}.png"
-    plt.savefig(save_path, dpi=150, bbox_inches="tight")
-    print(f"Saved plot to {save_path}")
+    # Mark the fold boundaries with alternating blue shades for training periods
+    fold_sizes = []
+    for train_idx, test_idx in tscv.split(X):
+        fold_sizes.append((train_idx[0], train_idx[-1], test_idx[0], test_idx[-1]))
+
+    # Define two alternating shades of blue
+    blue_colors = ["lightblue", "cornflowerblue"]
+
+    for i, (train_start, train_end, test_start, test_end) in enumerate(fold_sizes):
+        # Mark the start of each test fold with a dashed line
+        ax2.axvline(
+            x=target_dates[test_start],
+            color="gray",
+            linestyle="--",
+            alpha=0.5,
+            linewidth=1,
+        )
+
+        # Add small tick marks at the end of each training regime
+        ax2.axvline(
+            x=target_dates[train_end],
+            color="darkblue",
+            linestyle="-",
+            alpha=0.6,
+            linewidth=1.5,
+        )
+
+        color = blue_colors[i % 2]
+        if i == 0:
+            ax2.axvspan(
+                target_dates[train_start],
+                target_dates[train_end],
+                alpha=0.15,
+                color=color,
+                label="Training folds",
+            )
+        else:
+            ax2.axvspan(
+                target_dates[train_start],
+                target_dates[train_end],
+                alpha=0.15,
+                color=color,
+            )
+
+    ax2.set_xlabel("Date")
+    ax2.set_ylabel("Volatility")
+    ax2.set_title(
+        f"Out-of-Sample Volatility Forecasts (5-Fold CV, Level {depth})\nMean MSE: {np.mean(mse_scores):.6f}"
+    )
+    ax2.legend()
+    ax2.grid(True, alpha=0.3)
+    fig2.autofmt_xdate()
+
+    save_path_oos = SAVE_PATH / f"aapl_pure_data_forecast_oos_level_{depth}.png"
+    plt.savefig(save_path_oos, dpi=150, bbox_inches="tight")
+    print(f"Saved out-of-sample forecast plot to {save_path_oos}")
 
 # Approximation quality
 rng = np.random.default_rng(0)
@@ -143,12 +184,8 @@ targets = np.array(targets)
 
 # helper: given depth m, build signature feature matrix
 def build_sig_features(paths, depth):
-    d = paths[0].shape[1]
-    feat_dim = iisignature.siglength(d, depth)
-    X = np.zeros((len(paths), feat_dim))
-    for i, p in enumerate(paths):
-        p = np.asarray(p, dtype=float)  # <--- ensure numeric array
-        X[i, :] = iisignature.sig(p, depth)
+    signatures = [Signature.from_path(p, depth) for p in paths]
+    X = np.vstack([sig.array for sig in signatures])
     return X
 
 
