@@ -5,7 +5,7 @@ description = "Signature volatility"
 requires-python = ">=3.9,<3.10"
 authors = [
     {name = "Arthur Valk", email = "arthur.h.p.valk@gmail.com"},
-    {name = "Marta", email = "idk"},
+    {name = "Marta Amaro Calatayud", email = "marta.amaro.c@mgail.com"},
 ]
 
 dependencies = [
